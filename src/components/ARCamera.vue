@@ -6,7 +6,6 @@
     </div>
     
     <div class="camera-scene-container">
-      <!-- Camera Video Stream -->
       <video
         ref="videoElement"
         :style="{ display: showCamera ? 'block' : 'none' }"
@@ -16,14 +15,12 @@
         class="camera-video"
       ></video>
       
-      <!-- Canvas for capturing photo -->
       <canvas
         ref="canvasElement"
         style="display: none;"
         class="camera-canvas"
       ></canvas>
       
-      <!-- Image preview -->
       <img
         v-if="capturedImage"
         :src="capturedImage"
@@ -31,20 +28,17 @@
         class="captured-image"
       />
       
-      <!-- Loading state -->
       <div v-if="isLoading" class="loading-overlay">
         <div class="loading-spinner"></div>
         <p>{{ loadingMessage }}</p>
       </div>
       
-      <!-- Error message -->
       <div v-if="errorMessage" class="error-overlay">
         <p>{{ errorMessage }}</p>
         <button @click="clearError" class="error-btn">Dismiss</button>
       </div>
     </div>
     
-    <!-- Job Instructions Section -->
     <div class="job-instructions-section">
       <label for="jobInstructions" class="job-instructions-label">
         📝 Job Instructions <span class="required">*</span>
@@ -83,7 +77,6 @@
         </button>
       </div>
       
-      <!-- Hidden file input for photo upload -->
       <input
         ref="fileInput"
         type="file"
@@ -96,7 +89,8 @@
 </template>
 
 <script>
-import { generateReport } from '../utils/index.ts';
+// Import updated service function and interface names
+import { generateReport, ChatQueryArgs, ChatQueryResponse, sendChatQuery } from '../utils/index.ts';
 
 export default {
   name: 'ARCamera',
@@ -104,15 +98,15 @@ export default {
   data() {
     return {
       showCamera: true,
-      capturedImage: null,
-      capturedBlob: null,
+      capturedImage: null, // This will hold the Data URL of the captured/uploaded image
+      capturedBlob: null, // This will hold the Blob/File object of the captured/uploaded image
       isLoading: false,
       loadingMessage: '',
       errorMessage: '',
       stream: null,
       cameraReady: false,
       facingMode: 'environment', // Start with back camera
-      jobInstructions: ''
+      jobInstructions: '' // This will be the requested_tasks or a prompt
     }
   },
   async mounted() {
@@ -215,6 +209,7 @@ export default {
       this.errorMessage = '';
     },
     
+    // MODIFIED: analyzePhoto now aligns with GenerateArgs for initial report or acts as a primary image source
     async analyzePhoto() {
       if (!this.capturedImage) {
         this.errorMessage = 'No photo to analyze';
@@ -233,59 +228,50 @@ export default {
         // Convert data URL to base64 (remove data:image/jpeg;base64, prefix)
         const base64Image = this.capturedImage.split(',')[1];
         
+        // This component is now effectively providing the "before_image" for initial analysis,
+        // and its "jobInstructions" are the initial "requested_tasks".
+        // It's not doing a "before" vs "after" comparison in this method directly.
+        // It sends the *captured image* as the 'before_image' and the 'jobInstructions' as 'requested_tasks'.
+        // It sends 'after_image' as null, so the backend generates a report without verification.
         const analysisArgs = {
-          before_image: base64Image, // Optional - could be used for before/after comparisons
-          after_images: [base64Image], // Use the same image for analysis
-          requested_tasks: this.jobInstructions || 'Analyze this garden image and provide recommendations for plant care, landscaping improvements, and garden maintenance.'
+          before_image: base64Image,
+          after_image: null, // Send null for after_image as it's not present here
+          requested_tasks: this.jobInstructions, // Use jobInstructions as requested tasks
+          contractor_accomplishments: '' // No contractor accomplishments at this stage
         };
         
-        const response = await generateReport(analysisArgs);
-        
+        const response = await generateReport(analysisArgs); // Call the generateReport service
+
+        // This block will now correctly throw if response is not ok
         if (!response.ok) {
-          // throw new Error(`Analysis failed: ${response.statusText}`);
+          const errorData = await response.json(); // Attempt to parse error response
+          // Log specific error details from backend if available
+          console.error('Backend analysis failed:', errorData);
+          throw new Error(errorData.error || `Analysis failed: HTTP status ${response.status}`);
         }
         
-        const result = await response.json();
-        
-        // Emit events to parent component
-        this.$emit('photo-uploaded', {
+        const result = await response.json(); // Parse successful response
+
+        // Emit events to parent component with analysis result
+        this.$emit('photo-uploaded', { // Emit the captured photo and its details
           imageUrl: this.capturedImage,
           blob: this.capturedBlob,
           timestamp: new Date().toISOString()
         });
         
-        this.$emit('analysis-complete', {
-          imageUrl: this.capturedImage,
-          analysis: result,
+        this.$emit('analysis-complete', { // Emit the analysis result from the backend
+          analysis: result, // This 'result' is the ReportResponse object from index.ts
           timestamp: new Date().toISOString()
         });
         
-        // Close camera after successful analysis
-        this.$emit('close');
+        // Close camera after successful analysis (or keep open based on UX)
+        this.isLoading = false; // Important to reset loading state before closing
+        this.$emit('close'); // Close the camera component
         
       } catch (error) {
-        // pretend it worked for now
-        // const result = await response.json();
-        
-        // Emit events to parent component
-        this.$emit('photo-uploaded', {
-          imageUrl: this.capturedImage,
-          blob: this.capturedBlob,
-          timestamp: new Date().toISOString()
-        });
-        
-        this.$emit('analysis-complete', {
-          imageUrl: this.capturedImage,
-          analysis: "Job uploading. We'll notify you of bids on it.",
-          timestamp: new Date().toISOString()
-        });
-        
-        // Close camera after successful analysis
-        this.$emit('close');
-        
-        // console.error('Error analyzing photo:', error);
-        // this.isLoading = false;
-        // this.errorMessage = 'Failed to analyze photo. Please check your connection and try again.';
+        console.error('Error analyzing photo:', error);
+        this.isLoading = false;
+        this.errorMessage = 'Failed to analyze photo. Please check your connection and try again: ' + error.message;
       }
     },
     
@@ -294,13 +280,8 @@ export default {
         this.isLoading = true;
         this.loadingMessage = 'Switching camera...';
         
-        // Stop current stream
         this.stopCamera();
-        
-        // Toggle facing mode
         this.facingMode = this.facingMode === 'environment' ? 'user' : 'environment';
-        
-        // Reinitialize with new camera
         await this.initializeCamera();
         
       } catch (error) {
@@ -308,7 +289,6 @@ export default {
         this.isLoading = false;
         this.errorMessage = 'Could not switch camera. Using current camera.';
         
-        // Fallback to current camera
         this.facingMode = this.facingMode === 'environment' ? 'user' : 'environment';
         this.initializeCamera();
       }
@@ -322,13 +302,11 @@ export default {
       const file = event.target.files[0];
       if (!file) return;
       
-      // Validate file type
       if (!file.type.startsWith('image/')) {
         this.errorMessage = 'Please select a valid image file.';
         return;
       }
       
-      // Validate file size (max 10MB)
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
         this.errorMessage = 'Image file is too large. Please select an image smaller than 10MB.';
@@ -342,14 +320,9 @@ export default {
       reader.onload = (e) => {
         this.capturedImage = e.target.result;
         this.showCamera = false;
-        
-        // Convert file to blob for consistency with camera capture
         this.capturedBlob = file;
-        
         this.isLoading = false;
-        
-        // Clear the file input for future uploads
-        event.target.value = '';
+        event.target.value = ''; // Clear the file input for future uploads
       };
       
       reader.onerror = () => {
@@ -364,6 +337,7 @@ export default {
 </script>
 
 <style scoped>
+/* (Keep your existing styles unchanged) */
 .camera-container {
   position: fixed;
   top: 0;
