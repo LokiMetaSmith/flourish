@@ -88,26 +88,34 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, ref } from 'vue';
 // Import updated service function and interface names
-import { generateReport, ChatQueryArgs, ChatQueryResponse, sendChatQuery } from '../utils/index.ts';
+import { generateReport } from '../utils/index.ts';
+import type { ReportResponse } from '../utils/index.ts';
 
-export default {
+export default defineComponent({
   name: 'ARCamera',
   emits: ['close', 'photo-uploaded', 'analysis-complete'],
   data() {
     return {
       showCamera: true,
-      capturedImage: null, // This will hold the Data URL of the captured/uploaded image
-      capturedBlob: null, // This will hold the Blob/File object of the captured/uploaded image
+      capturedImage: null as string | null,
+      capturedBlob: null as Blob | null,
       isLoading: false,
       loadingMessage: '',
       errorMessage: '',
-      stream: null,
+      stream: null as MediaStream | null,
       cameraReady: false,
       facingMode: 'environment', // Start with back camera
-      jobInstructions: '' // This will be the requested_tasks or a prompt
+      jobInstructions: ''
     }
+  },
+  setup() {
+    const videoElement = ref<HTMLVideoElement | null>(null);
+    const canvasElement = ref<HTMLCanvasElement | null>(null);
+    const fileInput = ref<HTMLInputElement | null>(null);
+    return { videoElement, canvasElement, fileInput };
   },
   async mounted() {
     await this.initializeCamera();
@@ -130,16 +138,20 @@ export default {
         };
         
         this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-        this.$refs.videoElement.srcObject = this.stream;
+        if (this.videoElement) {
+          this.videoElement.srcObject = this.stream;
+        }
         
         // Wait for video to be ready
         await new Promise((resolve) => {
-          this.$refs.videoElement.onloadedmetadata = resolve;
+          if (this.videoElement) {
+            this.videoElement.onloadedmetadata = resolve;
+          }
         });
         
         this.cameraReady = true;
         this.isLoading = false;
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error accessing camera:', error);
         this.isLoading = false;
         this.errorMessage = 'Could not access camera. Please check permissions and try again.';
@@ -148,7 +160,7 @@ export default {
     
     stopCamera() {
       if (this.stream) {
-        this.stream.getTracks().forEach(track => track.stop());
+        this.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         this.stream = null;
       }
       this.cameraReady = false;
@@ -159,7 +171,7 @@ export default {
     },
     
     async capturePhoto() {
-      if (!this.$refs.videoElement || !this.$refs.canvasElement || !this.cameraReady) {
+      if (!this.videoElement || !this.canvasElement || !this.cameraReady) {
         this.errorMessage = 'Camera not ready';
         return;
       }
@@ -174,10 +186,14 @@ export default {
         this.isLoading = true;
         this.loadingMessage = 'Capturing photo...';
         
-        const video = this.$refs.videoElement;
-        const canvas = this.$refs.canvasElement;
+        const video = this.videoElement;
+        const canvas = this.canvasElement;
         const context = canvas.getContext('2d');
         
+        if (!context) {
+          throw new Error('Could not get 2d context from canvas');
+        }
+
         // Set canvas dimensions to match video
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -186,16 +202,18 @@ export default {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         // Convert to blob and data URL
-        const blob = await new Promise(resolve => {
+        const blob: Blob | null = await new Promise(resolve => {
           canvas.toBlob(resolve, 'image/jpeg', 0.9);
         });
         
-        this.capturedBlob = blob;
+        if (blob) {
+          this.capturedBlob = blob;
+        }
         this.capturedImage = canvas.toDataURL('image/jpeg', 0.9);
         this.showCamera = false;
         
         this.isLoading = false;
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error capturing photo:', error);
         this.isLoading = false;
         this.errorMessage = 'Failed to capture photo. Please try again.';
@@ -240,17 +258,7 @@ export default {
           contractor_accomplishments: '' // No contractor accomplishments at this stage
         };
         
-        const response = await generateReport(analysisArgs); // Call the generateReport service
-
-        // This block will now correctly throw if response is not ok
-        if (!response.ok) {
-          const errorData = await response.json(); // Attempt to parse error response
-          // Log specific error details from backend if available
-          console.error('Backend analysis failed:', errorData);
-          throw new Error(errorData.error || `Analysis failed: HTTP status ${response.status}`);
-        }
-        
-        const result = await response.json(); // Parse successful response
+        const result: ReportResponse = await generateReport(analysisArgs); // Call the generateReport service
 
         // Emit events to parent component with analysis result
         this.$emit('photo-uploaded', { // Emit the captured photo and its details
@@ -268,7 +276,7 @@ export default {
         this.isLoading = false; // Important to reset loading state before closing
         this.$emit('close'); // Close the camera component
         
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error analyzing photo:', error);
         this.isLoading = false;
         this.errorMessage = 'Failed to analyze photo. Please check your connection and try again: ' + error.message;
@@ -284,7 +292,7 @@ export default {
         this.facingMode = this.facingMode === 'environment' ? 'user' : 'environment';
         await this.initializeCamera();
         
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error switching camera:', error);
         this.isLoading = false;
         this.errorMessage = 'Could not switch camera. Using current camera.';
@@ -295,11 +303,14 @@ export default {
     },
     
     triggerFileUpload() {
-      this.$refs.fileInput.click();
+      if (this.fileInput) {
+        this.fileInput.click();
+      }
     },
     
-    handleFileUpload(event) {
-      const file = event.target.files[0];
+    handleFileUpload(event: Event) {
+      const target = event.target as HTMLInputElement;
+      const file = target.files?.[0];
       if (!file) return;
       
       if (!file.type.startsWith('image/')) {
@@ -317,12 +328,14 @@ export default {
       this.loadingMessage = 'Processing uploaded image...';
       
       const reader = new FileReader();
-      reader.onload = (e) => {
-        this.capturedImage = e.target.result;
-        this.showCamera = false;
-        this.capturedBlob = file;
-        this.isLoading = false;
-        event.target.value = ''; // Clear the file input for future uploads
+      reader.onload = (e: ProgressEvent<FileReader>) => {
+        if (e.target?.result) {
+          this.capturedImage = e.target.result as string;
+          this.showCamera = false;
+          this.capturedBlob = file;
+          this.isLoading = false;
+          target.value = ''; // Clear the file input for future uploads
+        }
       };
       
       reader.onerror = () => {
@@ -333,7 +346,7 @@ export default {
       reader.readAsDataURL(file);
     }
   }
-}
+});
 </script>
 
 <style scoped>

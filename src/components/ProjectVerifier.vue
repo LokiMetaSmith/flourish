@@ -99,65 +99,73 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue';
 // Import service functions and interfaces
-import { generateReport, sendChatQuery, ChatQueryArgs, ChatQueryResponse } from '../utils/index.ts';
+import { generateReport, sendChatQuery } from '../utils/index.ts';
+import type { ReportResponse, ChatQueryArgs, ChatQueryResponse } from '../utils/index.ts';
 
-export default {
+interface ChatMessage {
+  role: 'user' | 'ai';
+  message: string;
+}
+
+export default defineComponent({
   name: 'ProjectVerifier',
   data() {
     return {
       // --- Block 1 Data ---
-      beforeImageFile: null, // Stores the File object
+      beforeImageFile: null as File | null,
       beforeFileName: 'No file chosen',
-      beforeImageDataURL: null, // Stores base64 data URL
+      beforeImageDataURL: null as string | null,
 
-      newTaskInput: '', // v-model for new task input field
-      requestedTasks: [], // Array of strings for tasks
+      newTaskInput: '',
+      requestedTasks: [] as string[],
 
-      reportOutput: '', // Display for Initial Project Report
+      reportOutput: '',
 
       // --- Block 2 Data ---
-      afterImageFiles: [], // Stores File objects (array for multiple)
+      afterImageFiles: [] as File[],
       afterFileName: 'No files chosen',
-      afterImageDataURLs: [], // Stores base64 data URLs (array for multiple)
-      contractorAccomplishments: '', // v-model for contractor's text input
-      contractorSelectedTasks: [], // Array of strings for selected tasks (checkboxes)
+      afterImageDataURLs: [] as string[],
+      contractorAccomplishments: '',
+      contractorSelectedTasks: [] as string[],
 
-      finalReportOutput: '', // Display for Final Project Report
+      finalReportOutput: '',
 
       // --- Shared / State Data ---
-      isLoading: false, // Overall loading spinner
-      loadingMessage: '', // Unused in this component, but kept for consistency
-      errorMessage: '', // For displaying general errors
+      isLoading: false,
+      loadingMessage: '',
+      errorMessage: '',
 
       // Data passed to chat and download buttons after initial analysis
-      storedBeforeAnalysisText: null,
-      storedOriginalTasksText: null,
-      currentReport: null, // Full report from analyzeProject, used as context for chat
+      storedBeforeAnalysisText: null as string | null,
+      storedOriginalTasksText: null as string | null,
+      currentReport: null as string | null,
 
       // Chat Data
       chatInput: '',
-      chatEnabled: false, // Controls chat input/button disabled state
-      chatLoading: false, // Spinner specific to chat
-      chatConversationHistory: [{ role: 'ai', message: 'Hi! I can answer questions about your landscaping project. Start by suggesting tasks or analyzing your images.' }], // Initialize chat history
+      chatEnabled: false,
+      chatLoading: false,
+      chatConversationHistory: [{ role: 'ai', message: 'Hi! I can answer questions about your landscaping project. Start by suggesting tasks or analyzing your images.' }] as ChatMessage[],
     };
   },
   methods: {
     // --- General Utilities ---
-    async readFileAsDataURL(file) {
+    async readFileAsDataURL(file: File): Promise<string | ArrayBuffer | null> {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = (error) => reject(error);
+        reader.onload = (e: ProgressEvent<FileReader>) => resolve(e.target?.result || null);
+        reader.onerror = (error: ProgressEvent<FileReader>) => reject(error);
         reader.readAsDataURL(file);
       });
     },
 
     // --- Image Upload Handlers ---
-    async handleFileChange(event, type) {
-      const files = event.target.files;
-      if (files.length === 0) {
+    async handleFileChange(event: Event, type: 'before' | 'after') {
+      const target = event.target as HTMLInputElement;
+      const files = target.files;
+      if (!files || files.length === 0) {
         if (type === 'before') {
           this.beforeImageFile = null;
           this.beforeFileName = 'No file chosen';
@@ -172,13 +180,15 @@ export default {
 
       this.isLoading = true; // Use main spinner for file processing
       try {
-        let names = [];
-        let dataURLs = [];
+        let names: string[] = [];
+        let dataURLs: string[] = [];
 
-        for (const file of files) {
+        for (const file of Array.from(files)) {
           names.push(file.name);
           const dataURL = await this.readFileAsDataURL(file);
-          dataURLs.push(dataURL);
+          if (typeof dataURL === 'string') {
+            dataURLs.push(dataURL);
+          }
         }
 
         if (type === 'before') {
@@ -193,7 +203,7 @@ export default {
           console.log('afterImageDataURLs set:', this.afterFileName);
           this.updateCompletedTaskList(); // Update Block 2's task list based on images
         }
-      } catch (error) {
+      } catch (error: any) {
         this.errorMessage = `Failed to read file(s): ${error.message}`;
         console.error('File read error:', error);
       } finally {
@@ -212,7 +222,7 @@ export default {
         alert('Please enter a task.');
       }
     },
-    removeTask(index) {
+    removeTask(index: number) {
       this.requestedTasks.splice(index, 1); // Remove task from array
       this.updateCompletedTaskList(); // Re-render Block 2's list
     },
@@ -249,10 +259,10 @@ export default {
         console.log('Received Suggested Tasks:', data.suggested_tasks);
 
         const suggestedTasksArray = data.suggested_tasks.split('\n')
-          .map(task => task.trim())
-          .filter(task => task.length > 0 && task.startsWith('- '));
+          .map((task: string) => task.trim())
+          .filter((task: string) => task.length > 0 && task.startsWith('- '));
 
-        suggestedTasksArray.forEach(task => {
+        suggestedTasksArray.forEach((task: string) => {
           this.requestedTasks.push(task.substring(2)); // Remove bullet point
         });
         // Vue's reactivity will re-render taskList and completedTaskList automatically
@@ -264,7 +274,7 @@ export default {
         this.chatConversationHistory = [{ role: 'ai', message: 'Hi! I can answer questions about your landscaping project. Start by suggesting tasks or analyzing your images.' }];
 
 
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error suggesting tasks:', error);
         this.reportOutput = `Error suggesting tasks: ${error.message}`;
         alert('Failed to suggest tasks: ' + error.message);
@@ -299,7 +309,7 @@ export default {
           contractor_accomplishments: this.contractorAccomplishments // Send contractor's text
         };
 
-        const data = await generateReport(args); // Call generateReport from utils/index.ts
+        const data: ReportResponse = await generateReport(args); // Call generateReport from utils/index.ts
 
         this.storedBeforeAnalysisText = data.before_analysis_text;
         this.storedOriginalTasksText = data.original_tasks_text;
@@ -312,7 +322,7 @@ export default {
         this.chatEnabled = true;
         this.chatConversationHistory = [{ role: 'ai', message: 'Hi! I can answer questions about your landscaping project once you\'ve generated the initial report.' }];
 
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error generating initial report:', error);
         this.reportOutput = `Error: ${error.message}`;
         alert('Failed to generate initial report: ' + error.message);
@@ -412,7 +422,7 @@ export default {
           URL.revokeObjectURL(url);
 
 
-      } catch (error) {
+      } catch (error: any) {
           console.error('Error generating final report:', error);
           this.finalReportOutput = `Error: ${error.message}`;
           alert('Failed to generate final report: ' + error.message);
@@ -434,14 +444,14 @@ export default {
 
         // Prepare context for the AI
         const chatContext = {
-            before_analysis: this.storedBeforeAnalysisText,
-            original_tasks: this.storedOriginalTasksText,
+            before_analysis: this.storedBeforeAnalysisText || '',
+            original_tasks: this.storedOriginalTasksText || '',
             contractor_accomplishments: this.contractorAccomplishments,
-            full_report: this.currentReport,
+            full_report: this.currentReport || '',
             conversation_history: this.chatConversationHistory // Send history for continuity
         };
 
-        const args = {
+        const args: ChatQueryArgs = {
             user_question: userMessage,
             // Send before_image only if after_image is not present
             before_image: this.afterImageDataURLs.length === 0 && this.beforeImageDataURL ? this.beforeImageDataURL.split(',')[1] : null,
@@ -451,13 +461,13 @@ export default {
         };
 
         try {
-            const data = await sendChatQuery(args); // Call sendChatQuery from utils/index.ts
+            const data: ChatQueryResponse = await sendChatQuery(args); // Call sendChatQuery from utils/index.ts
             console.log('Received Chat API Response:', data);
             const aiMessage = data.response;
             this.displayChatMessage(aiMessage, 'ai');
             this.chatConversationHistory.push({ role: 'ai', message: aiMessage });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error during chat query:', error);
             this.displayChatMessage(`Error: ${error.message}`, 'ai');
         } finally {
@@ -467,7 +477,7 @@ export default {
         }
     },
 
-    displayChatMessage(message, sender) {
+    displayChatMessage(message: string, sender: 'user' | 'ai') {
         this.chatConversationHistory.push({ role: sender, message: message });
         // Vue's reactivity will render this to the template
         // Auto-scroll logic if needed, might need a ref to chatHistory div
@@ -486,7 +496,7 @@ export default {
     // Ensure chat is disabled on mount
     this.chatEnabled = false;
   }
-};
+});
 </script>
 
 <style scoped>
