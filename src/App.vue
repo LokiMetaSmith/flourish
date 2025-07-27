@@ -146,7 +146,7 @@ export default {
       console.log('Analysis complete:', analysisData);
       this.analysisResults.push(analysisData);
       // Display analysis results to the user
-      alert(`Garden analysis complete! Check console for results.`);
+      alert(`Job posted! We'll notify you of any bids on it.`);
     },
     toggleMenu() {
       this.showMenu = !this.showMenu;

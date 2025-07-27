@@ -50,7 +50,7 @@ export interface AskQuestionResponse {
 // HTTP POST Methods
 // ============================================================================
 
-// Route for http://10.132.122.162:5000/analyze_landscaping
+// Route for http://10.15.20.130:5000/analyze_landscaping
 // This method sends image data and tasks to the backend for AI analysis.
 export const generateReport = async (args: GenerateArgs): Promise<ReportResponse> => {
   try {
@@ -78,7 +78,7 @@ export const generateReport = async (args: GenerateArgs): Promise<ReportResponse
 // This method sends a question and context to the backend for AI response.
 export const askQuestion = async (args: AskQuestionArgs): Promise<AskQuestionResponse> => {
   try {
-    const response = await fetch('http://10.132.122.162:5000/ask_question', {
+    const response = await fetch('http://10.15.20.130:5000/ask_question', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
