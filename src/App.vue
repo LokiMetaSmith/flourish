@@ -48,6 +48,7 @@
 
     <!-- AR Camera Component -->
     <ARCamera v-if="showAR" @close="closeAR" @photo-uploaded="onPhotoUploaded" @analysis-complete="onAnalysisComplete" />
+    <ProjectVerifier v-if="showProjectVerifier" />
     
     <header>
       <h1>🌱 Flourish</h1>
@@ -60,6 +61,7 @@
         
         <div class="actions">
           <button class="btn-secondary" @click="viewGarden">View Projects</button>
+          <button class="btn-secondary" @click="openProjectVerifier">Verify Project</button>
           <button class="btn-ar" @click="openAR">{{this.userType === `customer` ? 'Add Photo' : 'Finish Job'}}</button>
         </div>
         
@@ -89,17 +91,20 @@
 <script>
 import packageJson from "../package.json";
 import ARCamera from "./components/ARCamera.vue";
+import ProjectVerifier from "./components/ProjectVerifier.vue";
 import { generateReport } from "./utils"
 
 export default {
   name: 'App',
   components: {
-    ARCamera
+    ARCamera,
+    ProjectVerifier
   },
   data() {
     return {
       version: packageJson.version,
       showAR: false,
+      showProjectVerifier: false,
       uploadedPhotos: [],
       analysisResults: [],
       showMenu: false,
@@ -112,6 +117,9 @@ export default {
     }
   },
   methods: {
+    openProjectVerifier() {
+      this.showProjectVerifier = true;
+    },
     async viewGarden() {
       const foo = await generateReport(); 
       console.log(`foo`, foo);

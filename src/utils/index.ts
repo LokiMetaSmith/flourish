@@ -14,7 +14,7 @@ export interface Plant {
 // Updated: 'after_image' changed to 'after_images' array, added 'contractor_accomplishments'
 export interface GenerateArgs {
   before_image: string; // Base64 encoded image for the 'before' state
-  after_images: string[]; // Array of Base64 encoded images for the 'after' state
+  after_image: string; // Base64 encoded image for the 'after' state
   requested_tasks: string; // Newline-separated string of tasks
   contractor_accomplishments?: string; // Optional text from contractor about accomplishments
 }
