@@ -1,6 +1,5 @@
 <template>
   <div class="app">
-    <!-- Hamburger Menu -->
     <div class="hamburger-menu">
       <button @click="toggleMenu" class="hamburger-btn" :class="{ 'menu-open': showMenu }">
         <span></span>
@@ -8,10 +7,8 @@
         <span></span>
       </button>
       
-      <!-- Menu Overlay -->
       <div v-if="showMenu" class="menu-overlay" @click="closeMenu"></div>
       
-      <!-- Menu Content -->
       <div class="menu-content" :class="{ 'menu-open': showMenu }">
         <div class="menu-header">
           <h3>Select User Type</h3>
@@ -46,9 +43,17 @@
       </div>
     </div>
 
-    <!-- AR Camera Component -->
-    <ARCamera v-if="showAR" @close="closeAR" @photo-uploaded="onPhotoUploaded" @analysis-complete="onAnalysisComplete" />
-    <ProjectVerifier v-if="showProjectVerifier" />
+    <ARCamera 
+      v-if="showAR" 
+      @close="closeAR" 
+      @photo-uploaded="onPhotoUploaded" 
+      @analysis-complete="onARAnalysisComplete" 
+    />
+    
+    <ProjectVerifier 
+      :initialBeforeImage="arCapturedBeforeImage"
+      :initialAfterImages="arCapturedAfterImages"
+    />
     
     <header>
       <h1>🌱 Flourish</h1>
@@ -60,10 +65,9 @@
         <p v-if="userType === 'customer'">Start by adding a photo of a place you want help with</p>
         
         <div class="actions">
-          <button class="btn-secondary" @click="viewGarden">View Projects</button>
           <button class="btn-secondary" @click="openProjectVerifier">Verify Project</button>
-          <button class="btn-ar" @click="openAR">{{this.userType === `customer` ? 'Add Photo' : 'Finish Job'}}</button>
-        </div>
+          <button class="btn-ar" @click="openAR">{{ this.userType === `customer` ? 'Add Photo (AR)' : 'Finish Job (AR)' }}</button>
+          </div>
         
         <div class="features">
           <div class="feature-card">
@@ -92,7 +96,8 @@
 import packageJson from "../package.json";
 import ARCamera from "./components/ARCamera.vue";
 import ProjectVerifier from "./components/ProjectVerifier.vue";
-import { generateReport } from "./utils"
+// generateReport is no longer directly called in App.vue, but in ProjectVerifier.vue
+// import { generateReport } from "./utils"; 
 
 export default {
   name: 'App',
@@ -104,11 +109,15 @@ export default {
     return {
       version: packageJson.version,
       showAR: false,
-      showProjectVerifier: false,
-      uploadedPhotos: [],
-      analysisResults: [],
+      // showProjectVerifier: true, // ProjectVerifier is now always shown as the main content
+      uploadedPhotos: [], // Used to collect photos captured by ARCamera
+      analysisResults: [], // Used to collect analysis results from ARCamera (if ARCamera does its own analysis)
       showMenu: false,
-      userType: 'customer' // default to customer
+      userType: 'customer', // default to customer
+
+      // Data to pass from ARCamera to ProjectVerifier
+      arCapturedBeforeImage: null, // Initial before image from ARCamera
+      arCapturedAfterImages: [], // Initial after images from ARCamera (if ARCamera captures multiple)
     }
   },
   computed: {
@@ -117,16 +126,14 @@ export default {
     }
   },
   methods: {
-    openProjectVerifier() {
-      this.showProjectVerifier = true;
-    },
-    async viewGarden() {
-      const foo = await generateReport(); 
-      console.log(`foo`, foo);
-    },
+    // openProjectVerifier() { // ProjectVerifier is now always visible
+    //   this.showProjectVerifier = true;
+    // },
+    // async viewGarden() { // This method is no longer relevant in this structure
+    //   const foo = await generateReport(); 
+    //   console.log(`foo`, foo);
+    // },
     openAR() {
-      // call generateReport in utils
-      // Check if device supports camera
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         this.showAR = true;
       } else {
@@ -136,17 +143,30 @@ export default {
     closeAR() {
       this.showAR = false;
     },
-    async onPhotoUploaded(photoData) {
-      console.log('Photo uploaded:', photoData);
-      this.uploadedPhotos.push(photoData);
-      // You can add logic here to display the photo or save it to a backend
-      alert(`Photo uploaded successfully! Total photos: ${this.uploadedPhotos.length}`);
+    // Handler for photo captured by ARCamera
+    onPhotoUploaded(photoData) {
+      console.log('Photo uploaded from ARCamera:', photoData);
+      // Decide if this photo is 'before' or 'after' based on context or user type
+      // For simplicity, let's assume ARCamera initially captures a 'before' image
+      // or that the user will manually assign it in ProjectVerifier.
+      // Or, if ARCamera is only used for "Add Photo", we pass it as an "after" image
+      
+      // If ARCamera analyzes, its analysis-complete event will also fire.
+      // If ARCamera is just for capture:
+      this.uploadedPhotos.push(photoData); // Keep a general list
+      
+      // Pass the image directly to ProjectVerifier if it's open, or store for later assignment
+      // For now, let's pass it as a potential 'before' image, and the user can move it if needed
+      this.arCapturedBeforeImage = photoData.imageUrl; // Assume AR is for initial capture
+      // If ARCamera was used to capture multiple after images, you'd add them here
+      // this.arCapturedAfterImages.push(photoData.imageUrl); // Example for multiple afters
     },
-    onAnalysisComplete(analysisData) {
-      console.log('Analysis complete:', analysisData);
+    // Handler for analysis results *from* ARCamera if ARCamera does its own analysis
+    onARAnalysisComplete(analysisData) {
+      console.log('Analysis complete from ARCamera:', analysisData);
       this.analysisResults.push(analysisData);
-      // Display analysis results to the user
-      alert(`Job posted! We'll notify you of any bids on it.`);
+      alert(`AR analysis completed! Check main report.`);
+      // You might want to update ProjectVerifier with this analysis here
     },
     toggleMenu() {
       this.showMenu = !this.showMenu;
@@ -359,6 +379,15 @@ header p {
   margin: 0.5rem 0 0 0;
   opacity: 0.9;
 }
+
+/* This is the problematic area. Ensure the 'footer' rule is properly closed. */
+footer {
+  background: #f5f5f5;
+  padding: 1rem;
+  text-align: center;
+  color: #666;
+  font-size: 0.875rem;
+} /* <-- This closing brace MUST be here and not duplicated/missing */
 
 main {
   flex: 1;
