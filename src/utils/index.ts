@@ -1,3 +1,4 @@
+// src/utils/index.ts
 // Garden App utilities
 
 export interface Plant {
@@ -11,10 +12,11 @@ export interface Plant {
   location?: string;
 }
 
-// Updated: 'after_image' changed to 'after_images' array, added 'contractor_accomplishments'
+// Updated: 'after_image' is singular string/null to match app.py's expectation for analyze_landscaping
+// after_image will be the FIRST after image, or null if none
 export interface GenerateArgs {
   before_image: string; // Base64 encoded image for the 'before' state
-  after_image: string; // Base64 encoded image for the 'after' state
+  after_image: string | null; // Base64 encoded image for the FIRST 'after' image, or null
   requested_tasks: string; // Newline-separated string of tasks
   contractor_accomplishments?: string; // Optional text from contractor about accomplishments
 }
@@ -28,20 +30,24 @@ export interface ReportResponse {
   error?: string; // Optional error field
 }
 
-// NEW: Interface for arguments to the /ask_question endpoint
-export interface AskQuestionArgs {
-  question: string;
-  before_image_data_url?: string; // Optional: The base64 URL of the before image
-  after_image_data_urls?: string[]; // Optional: Array of base64 URLs of after images
-  before_analysis_text?: string; // Optional: AI's analysis text of the before image
-  original_tasks_text?: string; // Optional: User's original tasks text
-  contractor_accomplishments_text?: string; // Optional: Contractor's accomplishments text
-  chat_history?: { role: string; content: string; }[]; // Optional: Previous chat messages
+// NEW: Interface for arguments to the /chat_query endpoint (renamed from /ask_question)
+// after_image is singular, as we only send the first one due to API limitation
+export interface ChatQueryArgs { // Renamed from AskQuestionArgs to align with Flask route
+  user_question: string; // The actual question
+  before_image?: string | null; // Optional: The base64 URL of the before image
+  after_image?: string | null; // Optional: The base64 URL of the FIRST after image
+  context: { // Context object to provide to the AI for its reasoning
+    before_analysis?: string;
+    original_tasks?: string;
+    contractor_accomplishments?: string;
+    full_report?: string;
+    conversation_history?: { role: string; message: string; }[]; // Previous chat messages
+  };
 }
 
-// NEW: Interface for response from the /ask_question endpoint
-export interface AskQuestionResponse {
-  answer: string; // The AI's answer to the question
+// NEW: Interface for response from the /chat_query endpoint
+export interface ChatQueryResponse { // Renamed from AskQuestionResponse
+  response: string; // The AI's answer to the question (renamed from 'answer')
   error?: string; // Optional error field
 }
 
@@ -50,7 +56,7 @@ export interface AskQuestionResponse {
 // HTTP POST Methods
 // ============================================================================
 
-// Route for http://10.15.20.130:5000/analyze_landscaping
+// Route for /analyze_landscaping
 // This method sends image data and tasks to the backend for AI analysis.
 export const generateReport = async (args: GenerateArgs): Promise<ReportResponse> => {
   try {
@@ -74,11 +80,11 @@ export const generateReport = async (args: GenerateArgs): Promise<ReportResponse
   }
 };
 
-// NEW: Route for http://10.132.122.162:5000/ask_question
+// NEW: Route for /chat_query (renamed from /ask_question)
 // This method sends a question and context to the backend for AI response.
-export const askQuestion = async (args: AskQuestionArgs): Promise<AskQuestionResponse> => {
+export const sendChatQuery = async (args: ChatQueryArgs): Promise<ChatQueryResponse> => { // Renamed from askQuestion
   try {
-    const response = await fetch('http://10.15.20.130:5000/ask_question', {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/chat_query`, { // Use VITE_API_BASE_URL
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -93,7 +99,7 @@ export const askQuestion = async (args: AskQuestionArgs): Promise<AskQuestionRes
 
     return response.json();
   } catch (error) {
-    console.error("Error asking question:", error);
+    console.error("Error sending chat query:", error); // Updated message
     throw error;
   }
 };
